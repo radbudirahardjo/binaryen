@@ -21,6 +21,7 @@
 // designed for compilation to an AST, this is for processing. There is
 // no built-in support for transforming this CFG into the AST back
 // again, it is just metadata on the side for computation purposes.
+// If you do want to convert back, see relooper-traversal.h.
 //
 // Usage: As the traversal proceeds, you can note information and add it to
 // the current basic block using currBasicBlock, on the contents
