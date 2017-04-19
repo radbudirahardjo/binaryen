@@ -18,24 +18,45 @@
 // Convert the AST to the Relooper CFG.
 //
 
-#ifndef cfg_traversal_h
-#define cfg_traversal_h
+#ifndef relooper_traversal_h
+#define relooper_traversal_h
 
 #include "wasm.h"
+#include "wasm-builder.h"
 #include "wasm-traversal.h"
 #include "cfg/cfg-traversal.h"
 #include "cfg/Relooper.h"
 
 namespace wasm {
 
-struct RelooperWalker : public CFGWalker<RelooperWalker, UnifiedExpressionVisitor<RelooperWalker>, CFG::Block> {
+struct RelooperWalker : public BasicCFGWalker<RelooperWalker, UnifiedExpressionVisitor<RelooperWalker>, CFG::Block*> {
+  std::unique_ptr<Relooper> relooper;
+
+  CFG::Block* makeBasicBlock() {
+    // create a block with an empty wasm block inside, ready to receive code
+    auto* ret = new Block(Builder(*getModule()).makeBlock());
+    relooper->AddBlock(ret);
+    return ret;
+  }
+
+  void link(CFG::Block* from, CFG::Block* to, Expression* condition) {
+    if (!from || !to) return; // if one of them is not reachable, ignore
+    // XXX check for only having one with nullptr condition
+    from->AddBranchTo(to, condition);
+  }
 
   void visitExpression(Expression* curr) {
     // If the current node has the none type, we add it to the current block. Otherwise,
     // it must be held
+    XXX
+  }
+
+  void doWalkFunction(Function* func) {
+    relooper = make_unique<Relooper>();
+    BasicCFGWalker<RelooperWalker, UnifiedExpressionVisitor<RelooperWalker>, CFG::Block*>::doWalkFunction(func);
   }
 };
 
 } // namespace wasm
 
-#endif // cfg_traversal_h
+#endif // relooper_traversal_h
