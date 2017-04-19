@@ -158,17 +158,17 @@ struct CoalesceLocals : public WalkerPass<CFGWalker<CoalesceLocals, Visitor<Coal
   static void doVisitGetLocal(CoalesceLocals* self, Expression** currp) {
     auto* curr = (*currp)->cast<GetLocal>();
      // if in unreachable code, ignore
-    if (!self->currBasicBlock) {
+    if (!self->getCurrBasicBlock()) {
       ExpressionManipulator::convert<GetLocal, Unreachable>(curr);
       return;
     }
-    self->currBasicBlock->contents.actions.emplace_back(Action::Get, curr->index, currp);
+    self->getCurrBasicBlock()->contents.actions.emplace_back(Action::Get, curr->index, currp);
   }
 
   static void doVisitSetLocal(CoalesceLocals* self, Expression** currp) {
     auto* curr = (*currp)->cast<SetLocal>();
     // if in unreachable code, ignore
-    if (!self->currBasicBlock) {
+    if (!self->getCurrBasicBlock()) {
       if (curr->isTee()) {
         ExpressionManipulator::convert<SetLocal, Unreachable>(curr);
       } else {
@@ -176,7 +176,7 @@ struct CoalesceLocals : public WalkerPass<CFGWalker<CoalesceLocals, Visitor<Coal
       }
       return;
     }
-    self->currBasicBlock->contents.actions.emplace_back(Action::Set, curr->index, currp);
+    self->getCurrBasicBlock()->contents.actions.emplace_back(Action::Set, curr->index, currp);
     // if this is a copy, note it
     if (auto* get = self->getCopy(curr)) {
       // add 2 units, so that backedge prioritization can decide ties, but not much more
@@ -419,7 +419,7 @@ void CoalesceLocals::calculateInterferences() {
   }
   // Params have a value on entry, so mark them as live, as variables
   // live at the entry expect their zero-init value.
-  LocalSet start = entry->contents.start;
+  LocalSet start = getEntryBlock()->contents.start;
   auto numParams = getFunction()->getNumParams();
   for (Index i = 0; i < numParams; i++) {
     start.insert(i);

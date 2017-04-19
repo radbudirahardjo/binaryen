@@ -24,7 +24,7 @@
 // If you do want to convert back, see relooper-traversal.h.
 //
 // Usage: As the traversal proceeds, you can note information and add it to
-// the current basic block using currBasicBlock, on the contents
+// the current basic block using getCurrBasicBlock(), on the contents
 // property, whose type is user-defined.
 //
 
@@ -36,53 +36,54 @@
 
 namespace wasm {
 
-template<typename SubType, typename VisitorType, typename Contents>
-struct CFGWalker : public ControlFlowWalker<SubType, VisitorType> {
-
-  // public interface
-
-  struct BasicBlock {
-    Contents contents; // custom contents
-    std::vector<BasicBlock*> out, in;
-  };
-
-  BasicBlock* entry; // the entry block
-
-  BasicBlock* makeBasicBlock() { // override this with code to create a BasicBlock if necessary
-    return new BasicBlock();
+// A basic CFG walkers that has hooks for generating a CFG, but leaves
+// the CFG data structures to be implemented by inheritors.
+template<typename SubType, typename VisitorType, typename BasicBlockPtr>
+struct BasicCFGWalker : public ControlFlowWalker<SubType, VisitorType> {
+  SubType* self() {
+    return static_cast<SubType*>(this);
   }
 
-  // internal details
+  // the current block in play during traversal. can be nullptr if unreachable,
+  // but note that we don't do a deep unreachability analysis - just enough
+  // to avoid constructing obviously-unreachable blocks (we can do a full reachability
+  // analysis on the CFG once it is constructed).
+  BasicBlockPtr getCurrBasicBlock() {
+    return currBasicBlock;
+  }
 
-  std::vector<std::unique_ptr<BasicBlock>> basicBlocks; // all the blocks
-  std::vector<BasicBlock*> loopTops; // blocks that are the tops of loops, i.e., have backedges to them
+  BasicBlockPtr getEntryBlock() {
+    return entryBlock;
+  }
 
-  // traversal state
-  BasicBlock* currBasicBlock; // the current block in play during traversal. can be nullptr if unreachable,
-                              // but note that we don't do a deep unreachability analysis - just enough
-                              // to avoid constructing obviously-unreachable blocks (we do a full reachability
-                              // analysis on the CFG once it is constructed).
-  std::map<Expression*, std::vector<BasicBlock*>> branches; // a block or loop => its branches
-  std::vector<BasicBlock*> ifStack;
-  std::vector<BasicBlock*> loopStack;
+  // hook to create a new basic block
+  BasicBlockPtr makeBasicBlock() {
+    WASM_UNREACHABLE();
+  }
 
+  // start a new basic block
   void startBasicBlock() {
-    currBasicBlock = makeBasicBlock();
-    basicBlocks.push_back(std::unique_ptr<BasicBlock>(currBasicBlock));
+    currBasicBlock = self()->makeBasicBlock();
   }
 
+  // start a new basic block that is unreachable
   void startUnreachableBlock() {
     currBasicBlock = nullptr;
   }
 
-  static void doStartUnreachableBlock(SubType* self, Expression** currp) {
-    self->startUnreachableBlock();
+  // hook to link two basic blocks
+  void link(BasicBlockPtr from, BasicBlockPtr to) {
+    WASM_UNREACHABLE();
   }
 
-  void link(BasicBlock* from, BasicBlock* to) {
-    if (!from || !to) return; // if one of them is not reachable, ignore
-    from->out.push_back(to);
-    to->in.push_back(from);
+  // impl
+
+  std::map<Expression*, std::vector<BasicBlockPtr>> branches; // a block or loop => its branches
+  std::vector<BasicBlockPtr> ifStack;
+  std::vector<BasicBlockPtr> loopStack;
+
+  static void doStartUnreachableBlock(SubType* self, Expression** currp) {
+    self->startUnreachableBlock();
   }
 
   static void doEndBlock(SubType* self, Expression** currp) {
@@ -237,22 +238,71 @@ struct CFGWalker : public ControlFlowWalker<SubType, VisitorType> {
     }
   }
 
+
   void doWalkFunction(Function* func) {
-    basicBlocks.clear();
-
-    startBasicBlock();
-    entry = currBasicBlock;
+    self()->startBasicBlock();
+    entryBlock = getCurrBasicBlock();
     ControlFlowWalker<SubType, VisitorType>::doWalkFunction(func);
-
     assert(branches.size() == 0);
     assert(ifStack.size() == 0);
     assert(loopStack.size() == 0);
   }
 
+private:
+  BasicBlockPtr currBasicBlock,
+                entryBlock;
+};
+
+// Very simple basic block, having only vectors of branches
+// in and out, plus a custom element for contents
+template<typename Contents>
+struct SimpleBasicBlock {
+  Contents contents;
+  std::vector<SimpleBasicBlock<Contents>*> out, in;
+};
+
+// Generates a simple CFG, where the blocks are SimpleBasicBlocks.
+template<typename SubType, typename VisitorType, typename Contents>
+struct CFGWalker : public BasicCFGWalker<SubType, VisitorType, SimpleBasicBlock<Contents>*> {
+  SubType* self() {
+    return static_cast<SubType*>(this);
+  }
+
+  // public interface
+
+  typedef SimpleBasicBlock<Contents> BasicBlock;
+
+  BasicBlock* makeBasicBlock() { // override this with code to create a BasicBlock if necessary
+    return new BasicBlock();
+  }
+
+  // internal details
+
+  std::vector<std::unique_ptr<BasicBlock>> basicBlocks; // all the blocks
+  std::vector<BasicBlock*> loopTops; // blocks that are the tops of loops, i.e., have backedges to them
+
+  // traversal state
+
+  void startBasicBlock() {
+    BasicCFGWalker<SubType, VisitorType, BasicBlock*>::startBasicBlock();
+    basicBlocks.push_back(std::unique_ptr<BasicBlock>(self()->getCurrBasicBlock()));
+  }
+
+  void link(BasicBlock* from, BasicBlock* to) {
+    if (!from || !to) return; // if one of them is not reachable, ignore
+    from->out.push_back(to);
+    to->in.push_back(from);
+  }
+
+  void doWalkFunction(Function* func) {
+    basicBlocks.clear();
+    BasicCFGWalker<SubType, VisitorType, BasicBlock*>::doWalkFunction(func);
+  }
+
   std::unordered_set<BasicBlock*> findLiveBlocks() {
     std::unordered_set<BasicBlock*> alive;
     std::unordered_set<BasicBlock*> queue;
-    queue.insert(entry);
+    queue.insert(self()->getEntryBlock());
     while (queue.size() > 0) {
       auto iter = queue.begin();
       auto* curr = *iter;
