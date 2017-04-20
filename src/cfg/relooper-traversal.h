@@ -41,7 +41,6 @@ struct RelooperWalker : public BasicCFGWalker<RelooperWalker, UnifiedExpressionV
   }
 
   void link(CFG::Block* from, CFG::Block* to, Expression* condition) {
-    if (!from || !to) return; // if one of them is not reachable, ignore
     // XXX check for only having one with nullptr condition
     from->AddBranchTo(to, condition);
   }
