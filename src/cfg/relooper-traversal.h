@@ -29,6 +29,7 @@
 
 namespace wasm {
 
+// XXX is it ok to do unified here?
 struct RelooperWalker : public BasicCFGWalker<RelooperWalker, UnifiedExpressionVisitor<RelooperWalker>, CFG::Block*> {
   std::unique_ptr<Relooper> relooper;
 
