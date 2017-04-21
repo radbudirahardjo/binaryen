@@ -28,6 +28,7 @@ SET(passes_SOURCES
   RemoveUnusedModuleElements.cpp
   ReorderLocals.cpp
   ReorderFunctions.cpp
+  ReReloop.cpp
   SimplifyLocals.cpp
   Vacuum.cpp
 )
