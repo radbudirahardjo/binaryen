@@ -168,6 +168,8 @@ struct CtorEvalExternalInterface : EvallingModuleInstance::ExternalInterface {
   }
 
   Literal callTable(Index index, LiteralList& arguments, WasmType result, EvallingModuleInstance& instance) override {
+    // TODO! anything inside the module is in fact safe to call, just imported stuff is not
+    // we assume the table is not modified (hmm)
     throw FailToEvalException("call table");
   }
 
